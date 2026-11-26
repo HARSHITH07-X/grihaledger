@@ -1,0 +1,513 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidInviteCode(code) {
+      return code is string && code.matches('^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$');
+    }
+
+    function memberPath(familyId, uid) {
+      return /databases/$(database)/documents/families/$(familyId)/members/$(uid);
+    }
+
+    function familyPath(familyId) {
+      return /databases/$(database)/documents/families/$(familyId);
+    }
+
+    function invitePath(code) {
+      return /databases/$(database)/documents/invites/$(code);
+    }
+
+    function categoryPath(familyId, categoryId) {
+      return /databases/$(database)/documents/families/$(familyId)/categories/$(categoryId);
+    }
+
+    function transactionPath(familyId, transactionId) {
+      return /databases/$(database)/documents/families/$(familyId)/transactions/$(transactionId);
+    }
+
+    function auditEventPath(familyId, eventId) {
+      return /databases/$(database)/documents/families/$(familyId)/auditEvents/$(eventId);
+    }
+
+    function isActiveFamilyMember(familyId) {
+      return isSignedIn() &&
+             exists(memberPath(familyId, request.auth.uid)) &&
+             get(memberPath(familyId, request.auth.uid)).data.isActive == true;
+    }
+
+    function isActiveUserInFamily(familyId, uid) {
+      return isValidId(uid) &&
+             exists(memberPath(familyId, uid)) &&
+             get(memberPath(familyId, uid)).data.isActive == true;
+    }
+
+    function isFamilyWriter(familyId) {
+      return isActiveFamilyMember(familyId) &&
+             get(memberPath(familyId, request.auth.uid)).data.role in ['admin', 'member'];
+    }
+
+    function isFamilyAdmin(familyId) {
+      return isActiveFamilyMember(familyId) &&
+             get(memberPath(familyId, request.auth.uid)).data.role == 'admin';
+    }
+
+    function isFamilyAdminAfter(familyId) {
+      return isSignedIn() &&
+             existsAfter(memberPath(familyId, request.auth.uid)) &&
+             getAfter(memberPath(familyId, request.auth.uid)).data.isActive == true &&
+             getAfter(memberPath(familyId, request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidUserProfile(data, uid) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['uid', 'displayName', 'email', 'familyId', 'createdAt', 'updatedAt']) &&
+             data.uid == uid &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.email is string && data.email.size() >= 1 && data.email.size() <= 200 &&
+             (!('familyId' in data) || data.familyId == null || isValidId(data.familyId)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidFamily(data) {
+      return data.keys().hasAll(['name', 'currencyCode', 'createdByUid', 'adminCount', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['name', 'currencyCode', 'createdByUid', 'adminCount', 'ledgerEpoch', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+             data.currencyCode == 'INR' &&
+             isValidId(data.createdByUid) &&
+             data.adminCount is int && data.adminCount >= 1 &&
+             (!('ledgerEpoch' in data) || (data.ledgerEpoch is int && data.ledgerEpoch >= 0)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidMember(data, familyId, memberUid) {
+      return data.keys().hasAll(['uid', 'familyId', 'displayName', 'email', 'role', 'isActive', 'joinedAt', 'updatedAt']) &&
+             data.keys().hasOnly(['uid', 'familyId', 'displayName', 'email', 'role', 'isActive', 'inviteCode', 'joinedAt', 'updatedAt']) &&
+             data.uid == memberUid &&
+             data.familyId == familyId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.email is string && data.email.size() >= 1 && data.email.size() <= 200 &&
+             data.role in ['admin', 'member', 'viewer'] &&
+             data.isActive is bool &&
+             (!('inviteCode' in data) || data.inviteCode == null || isValidInviteCode(data.inviteCode)) &&
+             data.joinedAt is timestamp && data.joinedAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCategory(data, familyId) {
+      return data.keys().hasAll(['name', 'familyId', 'type', 'iconKey', 'colorHex', 'isDefault', 'sortOrder', 'createdAt']) &&
+             data.keys().hasOnly(['name', 'familyId', 'type', 'iconKey', 'colorHex', 'isDefault', 'sortOrder', 'createdAt']) &&
+             data.familyId == familyId &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 50 &&
+             data.type in ['expense', 'income'] &&
+             data.iconKey is string && data.iconKey.size() >= 1 && data.iconKey.size() <= 50 &&
+             data.colorHex is int &&
+             data.isDefault is bool &&
+             data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 500 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidInviteCreate(data, code) {
+      return data.keys().hasAll(['code', 'familyId', 'familyName', 'role', 'status', 'createdByUid', 'createdAt', 'expiresAt']) &&
+             data.keys().hasOnly(['code', 'familyId', 'familyName', 'role', 'status', 'createdByUid', 'createdAt', 'expiresAt']) &&
+             data.code == code &&
+             isValidId(data.familyId) &&
+             data.familyName is string && data.familyName.size() >= 1 && data.familyName.size() <= 60 &&
+             data.role in ['member', 'viewer'] &&
+             data.status == 'pending' &&
+             data.createdByUid == request.auth.uid &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.expiresAt is timestamp &&
+             data.expiresAt > request.time &&
+             data.expiresAt <= request.time + duration.value(49, 'h');
+    }
+
+    function isValidInviteImmutableFields() {
+      return incoming().code == existing().code &&
+             incoming().familyId == existing().familyId &&
+             incoming().familyName == existing().familyName &&
+             incoming().role == existing().role &&
+             incoming().createdByUid == existing().createdByUid &&
+             incoming().createdAt == existing().createdAt &&
+             incoming().expiresAt == existing().expiresAt;
+    }
+
+    function isValidTransactionFields(data, familyId) {
+      return data.keys().hasAll([
+               'familyId', 'type', 'amountPaise', 'title', 'note', 'categoryId',
+               'occurredOn', 'paidByUid', 'createdByUid', 'status',
+               'fundingSource', 'paymentMethod', 'lastAuditEventId', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'familyId', 'type', 'amountPaise', 'title', 'note', 'categoryId',
+               'occurredOn', 'paidByUid', 'createdByUid', 'status', 'voidReason',
+               'voidedByUid', 'fundingSource', 'paymentMethod', 'expenseClassification',
+               'ledgerEpoch', 'lastAuditEventId', 'createdAt', 'updatedAt'
+             ]) &&
+             data.familyId == familyId &&
+             data.type in ['expense', 'income'] &&
+             data.amountPaise is int && data.amountPaise > 0 && data.amountPaise <= 10000000000 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+             data.note is string && data.note.size() <= 240 &&
+             isValidId(data.categoryId) &&
+             exists(categoryPath(familyId, data.categoryId)) &&
+             get(categoryPath(familyId, data.categoryId)).data.type == data.type &&
+             data.occurredOn is string && data.occurredOn.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+             isActiveUserInFamily(familyId, data.paidByUid) &&
+             isValidId(data.createdByUid) &&
+             data.status in ['active', 'voided'] &&
+             data.fundingSource in ['household', 'personal', 'family_card'] &&
+             data.paymentMethod in ['upi', 'card', 'cash', 'bank_transfer'] &&
+             (!('expenseClassification' in data) || data.expenseClassification in ['salary', 'non_salary']) &&
+             (!('ledgerEpoch' in data) || (data.ledgerEpoch is int && data.ledgerEpoch >= 0)) &&
+             isValidId(data.lastAuditEventId) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAuditEventFields(data, familyId) {
+      return data.keys().hasAll([
+               'familyId', 'transactionId', 'action', 'actorUid',
+               'summary', 'beforeState', 'afterState', 'occurredAt'
+             ]) &&
+             data.keys().hasOnly([
+               'familyId', 'transactionId', 'action', 'actorUid',
+               'summary', 'beforeState', 'afterState', 'ledgerEpoch', 'occurredAt'
+             ]) &&
+             data.familyId == familyId &&
+             isValidId(data.transactionId) &&
+             data.action in ['created', 'edited', 'voided'] &&
+             data.actorUid == request.auth.uid &&
+             data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 240 &&
+             data.beforeState is map && data.beforeState.size() <= 16 &&
+             data.afterState is map && data.afterState.size() <= 16 &&
+             (!('ledgerEpoch' in data) || (data.ledgerEpoch is int && data.ledgerEpoch >= 0)) &&
+             data.occurredAt is timestamp && data.occurredAt <= request.time;
+    }
+
+    // 1. User profiles
+    match /users/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && request.auth.uid == uid;
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(uid) &&
+                       request.auth.uid == uid &&
+                       isValidUserProfile(incoming(), uid) &&
+                       (!('familyId' in incoming()) ||
+                        incoming().familyId == null ||
+                        existsAfter(memberPath(incoming().familyId, uid)));
+
+      allow update: if isSignedIn() &&
+                       isValidId(uid) &&
+                       request.auth.uid == uid &&
+                       isValidUserProfile(incoming(), uid) &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'familyId', 'updatedAt']) &&
+                       (!('familyId' in incoming()) ||
+                        incoming().familyId == null ||
+                        (('familyId' in existing()) && incoming().familyId == existing().familyId) ||
+                        ((!('familyId' in existing()) || existing().familyId == null) &&
+                         existsAfter(memberPath(incoming().familyId, uid))));
+
+      allow delete: if false;
+    }
+
+    // 2. Families and subcollections
+    match /families/{familyId} {
+      allow get: if isSignedIn() && isValidId(familyId) && isActiveFamilyMember(familyId);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(familyId) &&
+                       isValidFamily(incoming()) &&
+                       incoming().createdByUid == request.auth.uid &&
+                       incoming().adminCount == 1 &&
+                       (!('ledgerEpoch' in incoming()) || incoming().ledgerEpoch == 0) &&
+                       existsAfter(memberPath(familyId, request.auth.uid)) &&
+                       getAfter(memberPath(familyId, request.auth.uid)).data.role == 'admin' &&
+                       getAfter(memberPath(familyId, request.auth.uid)).data.isActive == true;
+
+      allow update: if isSignedIn() &&
+                       isValidId(familyId) &&
+                       isFamilyAdmin(familyId) &&
+                       isValidFamily(incoming()) &&
+                       incoming().createdByUid == existing().createdByUid &&
+                       incoming().currencyCode == existing().currencyCode &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'adminCount', 'ledgerEpoch', 'updatedAt']) &&
+                       (
+                         incoming().adminCount == existing().adminCount ||
+                         incoming().adminCount == existing().adminCount + 1 ||
+                         incoming().adminCount == existing().adminCount - 1
+                       ) &&
+                       (
+                         (!('ledgerEpoch' in incoming()) && !('ledgerEpoch' in existing())) ||
+                         (
+                           ('ledgerEpoch' in incoming()) &&
+                           (
+                             incoming().ledgerEpoch == existing().get('ledgerEpoch', 0) ||
+                             incoming().ledgerEpoch == existing().get('ledgerEpoch', 0) + 1
+                           )
+                         )
+                       );
+
+      allow delete: if false;
+
+      match /members/{memberUid} {
+        allow get, list: if isSignedIn() && isValidId(familyId) && isActiveFamilyMember(familyId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(memberUid) &&
+                         memberUid == request.auth.uid &&
+                         isValidMember(incoming(), familyId, memberUid) &&
+                         incoming().isActive == true &&
+                         (
+                           // Founder creating a brand-new family in the same batch
+                           (
+                             incoming().role == 'admin' &&
+                             !exists(familyPath(familyId)) &&
+                             existsAfter(familyPath(familyId)) &&
+                             getAfter(familyPath(familyId)).data.createdByUid == request.auth.uid &&
+                             getAfter(familyPath(familyId)).data.adminCount == 1
+                           ) ||
+                           // Joiner redeeming a valid pending invite in the same batch (never admin)
+                           (
+                             incoming().role in ['member', 'viewer'] &&
+                             ('inviteCode' in incoming()) &&
+                             incoming().inviteCode is string &&
+                             isValidInviteCode(incoming().inviteCode) &&
+                             exists(invitePath(incoming().inviteCode)) &&
+                             get(invitePath(incoming().inviteCode)).data.familyId == familyId &&
+                             get(invitePath(incoming().inviteCode)).data.role == incoming().role &&
+                             get(invitePath(incoming().inviteCode)).data.status == 'pending' &&
+                             get(invitePath(incoming().inviteCode)).data.expiresAt > request.time &&
+                             getAfter(invitePath(incoming().inviteCode)).data.status == 'used' &&
+                             getAfter(invitePath(incoming().inviteCode)).data.usedByUid == request.auth.uid
+                           )
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(memberUid) &&
+                         isFamilyAdmin(familyId) &&
+                         isValidMember(incoming(), familyId, memberUid) &&
+                         incoming().uid == existing().uid &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().joinedAt == existing().joinedAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['role', 'updatedAt']) &&
+                         (
+                           (existing().role == 'admin' && incoming().role != 'admin' &&
+                             getAfter(familyPath(familyId)).data.adminCount >= 1 &&
+                             getAfter(familyPath(familyId)).data.adminCount == get(familyPath(familyId)).data.adminCount - 1) ||
+                           (existing().role != 'admin' && incoming().role == 'admin' &&
+                             getAfter(familyPath(familyId)).data.adminCount == get(familyPath(familyId)).data.adminCount + 1) ||
+                           (
+                             (existing().role == incoming().role || (existing().role != 'admin' && incoming().role != 'admin')) &&
+                             getAfter(familyPath(familyId)).data.adminCount == get(familyPath(familyId)).data.adminCount
+                           )
+                         );
+
+        allow delete: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(memberUid) &&
+                         isFamilyAdmin(familyId) &&
+                         (
+                           existing().role != 'admin' ||
+                           (
+                             getAfter(familyPath(familyId)).data.adminCount >= 1 &&
+                             getAfter(familyPath(familyId)).data.adminCount == get(familyPath(familyId)).data.adminCount - 1
+                           )
+                         );
+      }
+
+      match /categories/{categoryId} {
+        allow get, list: if isSignedIn() && isValidId(familyId) && isActiveFamilyMember(familyId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(categoryId) &&
+                         isValidCategory(incoming(), familyId) &&
+                         (isFamilyAdmin(familyId) || isFamilyAdminAfter(familyId));
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(categoryId) &&
+                         isFamilyAdmin(familyId) &&
+                         isValidCategory(incoming(), familyId) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().type == existing().type &&
+                         incoming().isDefault == existing().isDefault &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'iconKey', 'colorHex', 'sortOrder']);
+
+        allow delete: if isSignedIn() && isValidId(familyId) && isValidId(categoryId) && isFamilyAdmin(familyId);
+      }
+
+      match /transactions/{transactionId} {
+        allow get, list: if isSignedIn() && isValidId(familyId) && isActiveFamilyMember(familyId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(transactionId) &&
+                         isFamilyWriter(familyId) &&
+                         isValidTransactionFields(incoming(), familyId) &&
+                         incoming().createdByUid == request.auth.uid &&
+                         incoming().status == 'active' &&
+                         (!('voidReason' in incoming()) || incoming().voidReason == null) &&
+                         (!('voidedByUid' in incoming()) || incoming().voidedByUid == null) &&
+                         existsAfter(auditEventPath(familyId, incoming().lastAuditEventId)) &&
+                         getAfter(auditEventPath(familyId, incoming().lastAuditEventId)).data.transactionId == transactionId &&
+                         getAfter(auditEventPath(familyId, incoming().lastAuditEventId)).data.action == 'created' &&
+                         getAfter(auditEventPath(familyId, incoming().lastAuditEventId)).data.actorUid == request.auth.uid;
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(transactionId) &&
+                         isFamilyWriter(familyId) &&
+                         existing().status == 'active' &&
+                         (existing().createdByUid == request.auth.uid || isFamilyAdmin(familyId)) &&
+                         isValidTransactionFields(incoming(), familyId) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().lastAuditEventId != existing().lastAuditEventId &&
+                         existsAfter(auditEventPath(familyId, incoming().lastAuditEventId)) &&
+                         getAfter(auditEventPath(familyId, incoming().lastAuditEventId)).data.transactionId == transactionId &&
+                         getAfter(auditEventPath(familyId, incoming().lastAuditEventId)).data.actorUid == request.auth.uid &&
+                         (
+                           (
+                             incoming().status == 'active' &&
+                             (!('voidReason' in incoming()) || incoming().voidReason == null) &&
+                             (!('voidedByUid' in incoming()) || incoming().voidedByUid == null) &&
+                             getAfter(auditEventPath(familyId, incoming().lastAuditEventId)).data.action == 'edited'
+                           ) ||
+                           (
+                             incoming().status == 'voided' &&
+                             incoming().type == existing().type &&
+                             incoming().amountPaise == existing().amountPaise &&
+                             incoming().title == existing().title &&
+                             incoming().note == existing().note &&
+                             incoming().categoryId == existing().categoryId &&
+                             incoming().occurredOn == existing().occurredOn &&
+                             incoming().paidByUid == existing().paidByUid &&
+                             incoming().fundingSource == existing().fundingSource &&
+                             incoming().paymentMethod == existing().paymentMethod &&
+                             ((!('expenseClassification' in incoming()) && !('expenseClassification' in existing())) ||
+                              (('expenseClassification' in incoming()) && ('expenseClassification' in existing()) &&
+                               incoming().expenseClassification == existing().expenseClassification)) &&
+                             ((!('ledgerEpoch' in incoming()) && !('ledgerEpoch' in existing())) ||
+                              (('ledgerEpoch' in incoming()) && ('ledgerEpoch' in existing()) &&
+                               incoming().ledgerEpoch == existing().ledgerEpoch)) &&
+                             ('voidReason' in incoming()) &&
+                             incoming().voidReason is string &&
+                             incoming().voidReason.size() >= 1 &&
+                             incoming().voidReason.size() <= 240 &&
+                             ('voidedByUid' in incoming()) &&
+                             incoming().voidedByUid == request.auth.uid &&
+                             getAfter(auditEventPath(familyId, incoming().lastAuditEventId)).data.action == 'voided'
+                           )
+                         );
+
+        allow delete: if false;
+      }
+
+      match /auditEvents/{eventId} {
+        allow get, list: if isSignedIn() && isValidId(familyId) && isActiveFamilyMember(familyId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(eventId) &&
+                         isFamilyWriter(familyId) &&
+                         isValidAuditEventFields(incoming(), familyId) &&
+                         existsAfter(transactionPath(familyId, incoming().transactionId)) &&
+                         getAfter(transactionPath(familyId, incoming().transactionId)).data.lastAuditEventId == eventId &&
+                         (
+                           (
+                             incoming().action == 'created' &&
+                             !exists(transactionPath(familyId, incoming().transactionId)) &&
+                             incoming().beforeState.size() == 0 &&
+                             incoming().afterState.size() > 0
+                           ) ||
+                           (
+                             incoming().action in ['edited', 'voided'] &&
+                             exists(transactionPath(familyId, incoming().transactionId)) &&
+                             (
+                               get(transactionPath(familyId, incoming().transactionId)).data.createdByUid == request.auth.uid ||
+                               isFamilyAdmin(familyId)
+                             ) &&
+                             incoming().beforeState.size() > 0 &&
+                             incoming().afterState.size() > 0
+                           )
+                         );
+
+        allow update, delete: if false;
+      }
+    }
+
+    // 3. Top-level invites
+    match /invites/{code} {
+      allow get: if isSignedIn() && isValidInviteCode(code);
+      allow list: if isSignedIn() && isFamilyAdmin(resource.data.familyId);
+
+      allow create: if isSignedIn() &&
+                       isValidInviteCode(code) &&
+                       isValidInviteCreate(incoming(), code) &&
+                       isFamilyAdmin(incoming().familyId);
+
+      allow update: if isSignedIn() &&
+                       isValidInviteCode(code) &&
+                       existing().status == 'pending' &&
+                       isValidInviteImmutableFields() &&
+                       (
+                         // Admin revokes a pending invite
+                         (
+                           isFamilyAdmin(existing().familyId) &&
+                           incoming().status == 'revoked' &&
+                           incoming().revokedByUid == request.auth.uid &&
+                           incoming().revokedAt is timestamp &&
+                           incoming().revokedAt <= request.time &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'revokedByUid', 'revokedAt'])
+                         ) ||
+                         // Joiner claims a pending, unexpired invite in the same batch as member creation
+                         (
+                           existing().expiresAt > request.time &&
+                           incoming().status == 'used' &&
+                           incoming().usedByUid == request.auth.uid &&
+                           incoming().usedAt is timestamp &&
+                           incoming().usedAt <= request.time &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'usedByUid', 'usedAt']) &&
+                           existsAfter(memberPath(existing().familyId, request.auth.uid)) &&
+                           getAfter(memberPath(existing().familyId, request.auth.uid)).data.inviteCode == code
+                         )
+                       );
+
+      allow delete: if false;
+    }
+  }
+}

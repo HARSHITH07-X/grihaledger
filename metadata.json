@@ -1,0 +1,6 @@
+{
+  "name": "GrihaLedger",
+  "description": "Native Android family expense tracker with shared live ledger and AI month advisor",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

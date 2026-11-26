@@ -1,0 +1,302 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile created on first Google Sign-In.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's display name."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's verified Google email."
+        },
+        "familyId": {
+          "type": "string",
+          "description": "Optional ID of the single family the user belongs to."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["uid", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "Family": {
+      "title": "Family",
+      "description": "Shared family expense workspace.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the family household."
+        },
+        "currencyCode": {
+          "type": "string",
+          "enum": ["INR"],
+          "description": "Fixed INR currency for GrihaLedger."
+        },
+        "createdByUid": {
+          "type": "string",
+          "description": "UID of the founding admin."
+        },
+        "adminCount": {
+          "type": "integer",
+          "description": "Active admin count used to prevent removing or demoting the last admin."
+        },
+        "ledgerEpoch": {
+          "type": "integer",
+          "description": "Optional monotonic epoch incremented only by an admin to clear active ledger data without breaking append-only audit history."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["name", "currencyCode", "createdByUid", "adminCount", "createdAt", "updatedAt"]
+    },
+    "FamilyMember": {
+      "title": "FamilyMember",
+      "description": "Membership record inside a family.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Member's Firebase Auth UID."
+        },
+        "familyId": {
+          "type": "string",
+          "description": "Parent family ID."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Member display name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Member email."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "member", "viewer"],
+          "description": "Authorization role within the family."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether membership is active."
+        },
+        "inviteCode": {
+          "type": "string",
+          "description": "Optional invite code redeemed when joining."
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["uid", "familyId", "displayName", "email", "role", "isActive", "joinedAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Expense or income category belonging to a family.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Category display name."
+        },
+        "familyId": {
+          "type": "string",
+          "description": "Parent family ID."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["expense", "income"],
+          "description": "Category transaction type."
+        },
+        "iconKey": {
+          "type": "string",
+          "description": "Icon key identifier."
+        },
+        "colorHex": {
+          "type": "integer",
+          "description": "ARGB color integer."
+        },
+        "isDefault": {
+          "type": "boolean",
+          "description": "Whether seeded as a default category."
+        },
+        "sortOrder": {
+          "type": "integer",
+          "description": "Display sort order."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["name", "familyId", "type", "iconKey", "colorHex", "isDefault", "sortOrder", "createdAt"]
+    },
+    "Invite": {
+      "title": "Invite",
+      "description": "Single-use, 48-hour expiring family invite keyed by a 10-character unambiguous code.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "10-character unambiguous invite code."
+        },
+        "familyId": {
+          "type": "string",
+          "description": "Target family ID."
+        },
+        "familyName": {
+          "type": "string",
+          "description": "Denormalized family name for join preview."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["member", "viewer"],
+          "description": "Role granted upon joining (never admin)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "used", "revoked"],
+          "description": "Lifecycle state of the invite."
+        },
+        "createdByUid": {
+          "type": "string",
+          "description": "Admin UID who created the invite."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written via FieldValue.serverTimestamp()."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "48-hour expiry timestamp."
+        },
+        "usedByUid": {
+          "type": "string",
+          "description": "UID of the joiner who redeemed the invite."
+        },
+        "usedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when redeemed."
+        },
+        "revokedByUid": {
+          "type": "string",
+          "description": "Admin UID who revoked the invite."
+        },
+        "revokedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when revoked."
+        }
+      },
+      "required": ["code", "familyId", "familyName", "role", "status", "createdByUid", "createdAt", "expiresAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Family expense or income record stored with integer paise, separate paidByUid and createdByUid, and soft-void lifecycle.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "type": { "type": "string", "enum": ["expense", "income"] },
+        "amountPaise": { "type": "integer" },
+        "title": { "type": "string" },
+        "note": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "occurredOn": { "type": "string", "description": "ISO yyyy-MM-dd date" },
+        "paidByUid": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "voided"] },
+        "voidReason": { "type": "string" },
+        "voidedByUid": { "type": "string" },
+        "fundingSource": { "type": "string", "enum": ["household", "personal", "family_card"] },
+        "paymentMethod": { "type": "string", "enum": ["upi", "card", "cash", "bank_transfer"] },
+        "expenseClassification": { "type": "string", "enum": ["salary", "non_salary"], "description": "Optional expense classification distinguishing household/staff salary expenses from non-salary spending." },
+        "ledgerEpoch": { "type": "integer", "description": "Optional ledger generation epoch matching the parent Family ledgerEpoch." },
+        "lastAuditEventId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "type", "amountPaise", "title", "note", "categoryId", "occurredOn", "paidByUid", "createdByUid", "status", "fundingSource", "paymentMethod", "lastAuditEventId", "createdAt", "updatedAt"]
+    },
+    "AuditEvent": {
+      "title": "AuditEvent",
+      "description": "Append-only audit trail entry paired atomically with every transaction create, edit, or void.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "action": { "type": "string", "enum": ["created", "edited", "voided"] },
+        "actorUid": { "type": "string" },
+        "summary": { "type": "string" },
+        "beforeState": { "type": "object" },
+        "afterState": { "type": "object" },
+        "ledgerEpoch": { "type": "integer" },
+        "occurredAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "transactionId", "action", "actorUid", "summary", "beforeState", "afterState", "occurredAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Per-user profile and current family link."
+    },
+    "/families/{familyId}": {
+      "schema": { "$ref": "#/entities/Family" },
+      "description": "Family workspace root documents."
+    },
+    "/families/{familyId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/FamilyMember" },
+      "description": "Members and roles inside a family."
+    },
+    "/families/{familyId}/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Default and custom categories for a family."
+    },
+    "/families/{familyId}/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Shared family ledger transactions (never hard-deleted)."
+    },
+    "/families/{familyId}/auditEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/AuditEvent" },
+      "description": "Append-only audit trail for transaction creates, edits, and voids."
+    },
+    "/invites/{code}": {
+      "schema": { "$ref": "#/entities/Invite" },
+      "description": "Top-level collection of single-use invite codes."
+    }
+  }
+}

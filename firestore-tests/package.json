@@ -1,0 +1,8 @@
+{
+  "name": "grihaledger-firestore-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 node --test firestore.test.js"
+  }
+}
